@@ -8,6 +8,7 @@ which only word/document.xml differs for DOCX files that meet every safety check
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -40,6 +41,39 @@ def normalise(value: str) -> str:
 
 def visible_text(element: etree._Element) -> str:
     return "".join(element.xpath(".//w:t/text()", namespaces=NS)).strip()
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def find_anchor_matches(source: Path, required_texts: tuple[str, ...]) -> list[str]:
+    """Return DOCX paths containing every user-supplied visible-text anchor.
+
+    This preflight runs before creating the output tree.  It prevents a stale
+    source copy from being presented as the repaired version of a screenshot
+    whose newly entered data is not actually in that source.
+    """
+    if not required_texts:
+        return []
+    normalized = tuple(normalise(value) for value in required_texts)
+    matches: list[str] = []
+    for document_path in sorted(source.rglob("*.docx")):
+        if document_path.name.startswith("~$"):
+            continue
+        try:
+            with ZipFile(document_path, "r") as archive:
+                document = etree.fromstring(archive.read("word/document.xml"))
+        except Exception:
+            continue
+        document_text = normalise(visible_text(document))
+        if all(value in document_text for value in normalized):
+            matches.append(document_path.relative_to(source).as_posix())
+    return matches
 
 
 def is_blank_paragraph(element: etree._Element) -> bool:
@@ -147,6 +181,19 @@ def replace_document_xml(path: Path, document_xml: bytes) -> None:
             temporary_path.unlink()
 
 
+def changed_member_names(source_path: Path, output_path: Path) -> list[str]:
+    """Compare decompressed OOXML members; ZIP metadata is intentionally ignored."""
+    with ZipFile(source_path, "r") as source, ZipFile(output_path, "r") as output:
+        names = set(source.namelist()) | set(output.namelist())
+        return sorted(
+            name
+            for name in names
+            if name not in source.namelist()
+            or name not in output.namelist()
+            or source.read(name) != output.read(name)
+        )
+
+
 def ensure_safe_source_tree(source: Path) -> None:
     if not source.is_dir():
         raise ValueError(f"source directory does not exist: {source}")
@@ -180,6 +227,15 @@ def main() -> int:
         dest="header_tokens",
         help="required token in the first row of a predecessor training table; repeat to override defaults",
     )
+    parser.add_argument(
+        "--require-text",
+        action="append",
+        dest="required_texts",
+        help=(
+            "visible-text anchor from the screenshot/current document; repeat for every "
+            "anchor. All anchors must occur in one source DOCX before an output is created"
+        ),
+    )
     args = parser.parse_args()
 
     source = args.source.resolve()
@@ -187,10 +243,13 @@ def main() -> int:
     report = args.report.resolve()
     headings = tuple(args.headings or DEFAULT_HEADINGS)
     header_tokens = tuple(args.header_tokens or DEFAULT_HEADER_TOKENS)
+    required_texts = tuple(args.required_texts or ())
     if not headings or any(not normalise(item) for item in headings):
         raise SystemExit("at least one non-empty heading is required")
     if not header_tokens or any(not normalise(item) for item in header_tokens):
         raise SystemExit("at least one non-empty header token is required")
+    if any(not normalise(item) for item in required_texts):
+        raise SystemExit("every --require-text value must contain visible text")
     ensure_safe_source_tree(source)
     if output.exists():
         raise SystemExit(f"refusing to overwrite existing output directory: {output}")
@@ -199,9 +258,17 @@ def main() -> int:
     if not report_outside_output(report, output):
         raise SystemExit("report must be outside the staged output directory")
 
+    anchor_matches = find_anchor_matches(source, required_texts)
+    if required_texts and not anchor_matches:
+        raise SystemExit(
+            "required visible-text anchors were not found together in one source DOCX; "
+            "the supplied source is not the current screenshot version, so no output was created"
+        )
+
     shutil.copytree(source, output, copy_function=shutil.copy2)
     records: list[dict[str, object]] = []
     failures = 0
+    package_verification_failures = 0
     for document_path in sorted(output.rglob("*.docx")):
         if document_path.name.startswith("~$"):
             continue
@@ -213,7 +280,22 @@ def main() -> int:
             changed = revised_xml != original_xml
             if changed:
                 replace_document_xml(document_path, revised_xml)
-            records.append({"relative_path": relative_path, "changed": changed, "repairs": repairs})
+            source_document_path = source / relative_path
+            changed_members = changed_member_names(source_document_path, document_path)
+            package_verified = changed_members == (["word/document.xml"] if changed else [])
+            if not package_verified:
+                package_verification_failures += 1
+            records.append(
+                {
+                    "relative_path": relative_path,
+                    "changed": changed,
+                    "repairs": repairs,
+                    "source_sha256": sha256_file(source_document_path),
+                    "output_sha256": sha256_file(document_path),
+                    "changed_members": changed_members,
+                    "package_verified": package_verified,
+                }
+            )
         except Exception as error:
             failures += 1
             records.append({"relative_path": relative_path, "changed": False, "error": str(error)})
@@ -233,12 +315,23 @@ def main() -> int:
             for repair in record.get("repairs", [])
         ),
         "failures": failures,
+        "package_verification_failures": package_verification_failures,
+        "version_receipt": {
+            "source_root": str(source),
+            "output_root": str(output),
+            "required_texts": list(required_texts),
+            "anchor_match_paths": anchor_matches,
+            "rule": (
+                "Every required text must occur in one source DOCX before staging; "
+                "use this receipt to open the matching output document, not the source."
+            ),
+        },
         "records": records,
     }
     report.parent.mkdir(parents=True, exist_ok=True)
     report.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps({key: summary[key] for key in summary if key != "records"}, ensure_ascii=False))
-    return 1 if failures else 0
+    return 1 if failures or package_verification_failures else 0
 
 
 if __name__ == "__main__":
