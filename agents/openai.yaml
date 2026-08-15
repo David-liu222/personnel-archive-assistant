@@ -1,0 +1,4 @@
+interface:
+  display_name: "档案助手"
+  short_description: "安全更新一人一档全部文档信息，并严格锁定原有格式和版式不变"
+  default_prompt: "使用 $personnel-archive-assistant 在不改变任何原有格式的前提下，更新一人一档中指定文档的信息。"
