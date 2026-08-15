@@ -1,6 +1,6 @@
 ---
 name: personnel-archive-assistant
-description: Safely revise Chinese employee one-person-one-file archives, including complete ZIP packages with one folder per employee, format-frozen local information updates in existing DOCX/XLSX archive documents, bulk-supplement existing DOCX `专项安全培训教育记录` tables from a roster, or assemble and update Chinese safety-training one-session-one-file archives from fixed templates, rosters, training materials, attendance, exams, and evidence. Use for employee archive tasks; preserve originals, archive trees, every document's layout and formatting, and untouched files, separate the archive modes, and produce an auditable checklist.
+description: Safely revise Chinese employee one-person-one-file archives, including complete ZIP packages with one folder per employee, format-frozen local information updates in existing DOCX/XLSX archive documents, explicit repair of DOCX wrong-page defects caused by blank record-table tail rows spilling before a named heading, bulk-supplement existing DOCX `专项安全培训教育记录` tables from a roster, or assemble and update Chinese safety-training one-session-one-file archives from fixed templates, rosters, training materials, attendance, exams, and evidence. Use for employee archive tasks; preserve originals, archive trees, every document's layout and formatting, and untouched files, separate the archive modes, and produce an auditable checklist.
 ---
 
 # Personnel Archive Assistant
@@ -44,6 +44,15 @@ description: Safely revise Chinese employee one-person-one-file archives, includ
 5. Use `scripts/update_training_records.py` for a folder-stage batch. It refuses an existing output directory, copies the full source tree first, writes only the matched DOCX files, and emits an audit report outside the staged tree. For a ZIP, safely extract first with `archive_package.py`, run the updater in the staging tree, then repack and verify the archive.
 6. Reopen every changed DOCX after saving. Verify the requested values, the position relative to the dated records, and the primary cell/paragraph/run formatting against the cloned reference row. Render changed DOCX files before delivery when rendering is available.
 
+## Surgical DOCX pagination repair
+
+1. Use this path only after the user explicitly asks to repair a wrong page, a blank table fragment before a heading, or blank record rows that spill onto a new page. Read [references/pagination-repair.md](references/pagination-repair.md) before changing a file.
+2. Require the affected following heading(s) by exact text. The default approved headings are `专项安全培训教育记录` and `安全生产一级教育情况`; use any other heading only when the user names it or the screenshot/source makes it unambiguous.
+3. Treat this as a narrow, user-authorized structural exception: remove only contiguous trailing `w:tr` rows that have no visible text, fields, drawings, objects, bookmarks, comments, or references, and only from the training-record table immediately before the named heading. Retain the table header, all populated rows, the heading, blank paragraphs, explicit page breaks, and every row after the heading.
+4. Never fix this defect by changing margins, fonts, row heights, table geometry, line spacing, paragraph spacing, page-break settings, or global pagination. Do not remove blank rows from a table merely because it has spare capacity or appears elsewhere in the document.
+5. Use `scripts/repair_pagination_blank_tails.py` for a folder-stage batch. It copies the complete tree to a fresh output directory, rewrites only `word/document.xml` in changed DOCX files, and emits an audit report outside the staged tree. Any title-in-table, missing/ambiguous predecessor table, unexpected header, nonblank tail row, or unsupported document is `待确认`.
+6. Compare the staged tree with the source tree, verify that every changed DOCX differs only in `word/document.xml`, confirm no targeted table retains a removable blank tail, and render every changed DOCX. Inspect the affected page transition in addition to normal visual review.
+
 ## Output contract
 
 - Personnel mode: revised archive file or batch ZIP using the original editable format where possible, plus `一人一档变更清单.xlsx` with the exact Chinese headers `人员、来源文件、字段、原值、新值、依据、状态、备注`.
@@ -61,3 +70,4 @@ description: Safely revise Chinese employee one-person-one-file archives, includ
 - A PDF may be used as evidence, but do not pretend it was safely edited in place. Produce an editable derivative and record the format change.
 - Use `python-docx` and `openpyxl` for editable files. Reopen every output before completion and verify the expected people and sheets are present.
 - Treat identity cards, education certificates, medical records, phone numbers, and employee files as sensitive personal data. Read only what is required for the stated modifications, keep intermediate extraction inside the case folder, and never copy source data into the Skill directory or logs.
+- Do not treat an empty DOCX table row as an error by itself. Delete it only through the named-heading pagination-repair path and only after confirming that it is a removable tail row causing the requested defect.

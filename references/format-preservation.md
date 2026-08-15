@@ -36,3 +36,12 @@ Do not convert or edit PDF, legacy `.doc`, images, shortcuts, macros, or unsuppo
 3. Render changed DOCX/XLSX files. Inspect for missing text, clipping, overflow, altered table geometry, unexpected wraps, row-height changes, broken page breaks, or missing objects.
 4. If the new content causes a visual change that cannot be avoided without altering formatting, mark that file `待确认`; do not make compensating layout changes.
 5. Record the exact file, field, old value, new value, reference anchor, and verification result in the change list.
+
+## User-authorized pagination repair exception
+
+Use this exception only when a user identifies a wrong page caused by blank record-table tail rows appearing before a named following section. Read `pagination-repair.md` for the complete procedure.
+
+- The source layout remains authoritative. Do not compensate with margins, fonts, row heights, table geometry, line spacing, paragraph spacing, or page-break changes.
+- Keep the table header, every populated row, every blank paragraph, existing explicit page break, and all template rows after the named heading.
+- Remove only contiguous, semantically empty `w:tr` rows at the end of the training-record table immediately before the named heading. A row containing a field, drawing, object, bookmark, comment, reference, or any text is not removable.
+- Repack only `word/document.xml` for changed DOCX files. Verify all other OOXML members and all untouched archive files remain byte-for-byte unchanged.
