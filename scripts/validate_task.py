@@ -22,6 +22,20 @@ if archive_kind == "personnel" and payload.get("mode") == "single" and not str(p
 if archive_kind == "trainingPeriod" and not str(payload.get("department") or "").strip():
     errors.append("department is required for trainingPeriod mode")
 source_files = task.get("source_files") or []
+lecture_source = payload.get("lectureSource")
+if lecture_source not in {None, "documents", "media"}:
+    errors.append("lectureSource must be documents or media when provided")
+if lecture_source == "media":
+    if archive_kind != "trainingPeriod":
+        errors.append("media lecture requires archiveKind trainingPeriod")
+    if not str(payload.get("lectureTopic") or "").strip():
+        errors.append("lectureTopic is required for a media lecture")
+    names = [str(item.get("original_name") or "") for item in source_files]
+    suffixes = [pathlib.Path(name).suffix.lower() for name in names]
+    if not any(suffix in {".mp4", ".m4v", ".mov", ".avi", ".mkv", ".mp3", ".wav", ".m4a"} for suffix in suffixes):
+        errors.append("media lecture requires at least one supported video or audio source")
+    if ".docx" not in suffixes:
+        errors.append("media lecture requires a DOCX training archive template")
 zip_sources = [item for item in source_files if pathlib.Path(str(item.get("original_name") or "")).suffix.lower() == ".zip"]
 archive_upload = task.get("archive_upload")
 if zip_sources and archive_kind != "personnel":
