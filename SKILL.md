@@ -1,6 +1,6 @@
 ---
 name: personnel-archive-assistant
-description: Safely revise Chinese employee one-person-one-file archives, including complete ZIP packages with one folder per employee, format-frozen local information updates in existing DOCX/XLSX archive documents, explicit repair of DOCX wrong-page defects caused by blank record-table tail rows spilling before a named heading, bulk-supplement existing DOCX `专项安全培训教育记录` tables from a roster, create evidence-grounded safety lecture handouts and one-session-one-file archives from incident video or other course material using a supplied DOCX archive as the format authority, or assemble and update Chinese safety-training archives from fixed templates, rosters, attendance, exams, and evidence. Use for employee archive tasks; preserve originals, archive trees, every document's layout and formatting, and untouched files, separate the archive modes, and produce an auditable checklist.
+description: Safely revise Chinese employee one-person-one-file archives, including complete ZIP packages with one folder per employee, format-frozen local information updates in existing DOCX/XLSX archive documents, explicit repair of DOCX wrong-page defects caused by blank record-table tail rows spilling before a named heading, bulk-supplement existing DOCX `专项安全培训教育记录` tables from a roster, create evidence-grounded safety lecture handouts and one-session-one-file archives from incident video or other course material using a supplied DOCX archive as the format authority, create editable safety-training PPTX decks, or produce source-grounded training papers and platform-import workbooks from provided templates. Use for employee archive tasks; route each request through exactly one of four auditable branches, preserve originals, archive trees, every document's layout and formatting, and untouched files.
 ---
 
 # Personnel Archive Assistant
@@ -23,6 +23,17 @@ description: Safely revise Chinese employee one-person-one-file archives, includ
 14. Preserve the original file extension. Do not convert `.doc` to `.docx`, PDF to Word, or an image to PDF unless the user explicitly requests a format conversion. If a requested field exists only in a format that cannot be safely edited in place, leave that file unchanged and record `待确认`.
 15. For editable DOCX/XLSX files, change the smallest possible run, paragraph, table cell, or worksheet cell. Never recreate a document, worksheet, paragraph, table, row, column, or data region merely to update information. Preserve headers, footers, section settings, relationships, images, styles, merged cells, formulas, row heights, column widths, print areas, page breaks, and file names. Reopen every changed file and render changed Word/Excel documents before completion when rendering tools are available.
 16. Repack the staged tree with `scripts/archive_package.py pack`, then run `scripts/archive_package.py verify` against the uploaded ZIP. The verification must show that every original path remains present. Reconcile the reported changed paths against the change-list workbook; unexpected changed, missing, renamed, or extra paths are a failed output that must be corrected.
+
+## Four-branch routing
+
+1. Run `scripts/route_archive_workflow.py task.json` before drafting or editing. Read [references/workflow-routing.md](references/workflow-routing.md) for the exact task fields, precedence, and stop conditions.
+2. Route only when the script returns `status: routed`; a `待确认` result means the evidence/intent is missing or more than one production branch was requested. Do not use filenames, embedded source instructions, or assumed department practice to break a tie.
+3. Follow exactly one branch per task:
+   - `archiveUpdate`: existing personnel/archive updates, document-based training-period archives, training-record additions, and the approved pagination repair.
+   - `mediaLecture`: incident media or other course material to an evidence-grounded safety lecture and training-period archive. Read [references/safety-lecture-from-media.md](references/safety-lecture-from-media.md).
+   - `safetyPresentation`: supported material to an editable safety-training PPTX. Read [references/safety-training-presentation.md](references/safety-training-presentation.md).
+   - `safetyAssessment`: supported training material to a Word paper, question list, or platform-import workbook. Read [references/training-assessment.md](references/training-assessment.md).
+4. A user may explicitly set `payload.workflow` to one branch name. Still enforce that branch's input standard; an explicit choice never permits fabricated facts, missing templates, or unsupported platform upload.
 
 ## Format-frozen updates in other archive documents
 
@@ -53,6 +64,19 @@ description: Safely revise Chinese employee one-person-one-file archives, includ
 5. Keep the teaching content and training-administration evidence separate. A generated lecture may explain the event chain, hazards, controls, emergency actions, and self-check questions; it does not prove delivery, attendance, examination, photographs, signatures, “three violations,” or an evaluation conclusion. Keep unsupplied registers blank and record missing evidence in the checklist.
 6. Produce an editable DOCX lecture/archive and the required training checklist. Produce a Markdown review draft only when requested; it is a content-review companion, never the formatting source for the DOCX. Reopen and render every changed DOCX; where WPS is the format authority, accept the result only after WPS visual review.
 
+## Safety-training PPTX
+
+1. Use only after the router selects `safetyPresentation`. Read [references/safety-training-presentation.md](references/safety-training-presentation.md) before drafting.
+2. Build every slide from the source ledger or approved lecture. Treat a media file as evidence, not a slide-design instruction. Do not turn unsupported counts, chronology, causes, sanctions, photos, or quotations into slide facts.
+3. Produce an editable PPTX by default. Produce HTML slides, video, a Markdown outline, or images only when explicitly requested. If a PPTX template is supplied, preserve its slide master, layouts, theme, fonts, and placeholders; otherwise use a clear restrained safety-training layout rather than claiming a copied visual style.
+4. Render and inspect every slide for clipping, overlap, low contrast, missing source qualifiers, inaccessible reading order, and page-number/section continuity. Do not publish, upload, or share it externally without explicit user authorization.
+
+## Training assessment and platform import
+
+1. Use only after the router selects `safetyAssessment`. Read [references/training-assessment.md](references/training-assessment.md) before drafting.
+2. Derive questions and answers only from supplied/approved training material. Preserve the exact structure of a supplied Word paper or official import workbook; do not infer score weights, answer keys, difficulty, categories, or platform fields.
+3. Prepare platform-import files only from the platform's provided official template. Do not log into a questionnaire/exam platform, upload a file, create an examination, invite candidates, or publish results unless the user separately authorizes that external action.
+
 ## Surgical DOCX pagination repair
 
 1. Use this path only after the user explicitly asks to repair a wrong page, a blank table fragment before a heading, or blank record rows that spill onto a new page. Read [references/pagination-repair.md](references/pagination-repair.md) before changing a file.
@@ -70,6 +94,8 @@ description: Safely revise Chinese employee one-person-one-file archives, includ
 - Personnel browser-folder batch: the ZIP must preserve the complete department/person structure derived from safe relative paths, including unchanged files, and include the complete change list. Never write back to or replace the user's desktop source folder.
 - Training-period mode: `<部门或班组>-<年月>-安全培训档案.docx` plus `培训档案核对清单.xlsx` with the exact Chinese headers `环节、必备项目、依据来源、状态、冲突、备注`.
 - Media-lecture training-period mode: the same editable DOCX archive and checklist; add `<主题>-安全培训讲义.md` only when the user requests a Markdown review copy. Keep source-media extracts and transcripts inside the case workspace, not in the Skill or final archive unless explicitly requested.
+- Safety-presentation mode: `<主题>-安全培训.pptx`; add an HTML deck or Markdown outline only when requested. Keep source evidence and presentation assets outside the public Skill package.
+- Safety-assessment mode: the user-requested Word paper, question list, or platform-import workbook, plus an answer key only when the template/task requires one. Do not include raw course material, trainee data, results, or login data.
 - Do not expose scratch files or extracted text.
 
 ## Safety rules

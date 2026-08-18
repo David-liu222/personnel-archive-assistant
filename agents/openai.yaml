@@ -1,4 +1,4 @@
 interface:
   display_name: "档案助手"
-  short_description: "按原格式更新档案、制作安全讲义并修复错页"
-  default_prompt: "使用 $personnel-archive-assistant 根据事故视频和培训模板制作可核验的安全讲义或培训档案。"
+  short_description: "按原格式处理档案、讲义、PPT、试题与错页，保留原模板"
+  default_prompt: "使用 $personnel-archive-assistant 根据文件自动路由到档案、讲义、PPT或考试分支。"
