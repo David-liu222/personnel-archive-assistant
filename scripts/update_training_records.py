@@ -157,14 +157,40 @@ def choose_insert_after(
     return after, format_source
 
 
+def primary_format_r_pr(paragraph) -> object | None:
+    """Return the rPr of the run that best represents the cell's character formatting.
+
+    Prefer the first run that carries visible text, then the first run that has
+    an rPr, then the first run of any kind. This keeps the copied formatting
+    stable when a cell contains leading empty runs (common in WPS/Word files).
+    """
+    text_r_pr = None
+    fallback_r_pr = None
+    for run in paragraph.iter(qn("w:r")):
+        r_pr = run.rPr
+        if r_pr is None:
+            continue
+        if text_r_pr is None and any((node.text or "").strip() for node in run.findall(qn("w:t"))):
+            text_r_pr = r_pr
+        if fallback_r_pr is None:
+            fallback_r_pr = r_pr
+        if text_r_pr is not None:
+            break
+    if text_r_pr is not None:
+        return text_r_pr
+    if fallback_r_pr is not None:
+        return fallback_r_pr
+    first_run = next(iter(paragraph.iter(qn("w:r"))), None)
+    return first_run.rPr if first_run is not None else None
+
+
 def primary_style_fingerprint(cell: _Cell) -> tuple[bytes, bytes, bytes]:
     """Capture the primary cell, paragraph, and run formatting without its text."""
     tc_pr = cell._tc.tcPr
     paragraphs = [child for child in cell._tc if child.tag == qn("w:p")]
     paragraph = paragraphs[0] if paragraphs else None
     p_pr = paragraph.pPr if paragraph is not None else None
-    run = next(iter(paragraph.iter(qn("w:r"))), None) if paragraph is not None else None
-    r_pr = run.rPr if run is not None else None
+    r_pr = primary_format_r_pr(paragraph) if paragraph is not None else None
     return tuple(
         etree.tostring(item, method="c14n", exclusive=True, with_comments=False)
         if item is not None
@@ -184,8 +210,8 @@ def replace_cell_text_preserving_format(cell: _Cell, value: str) -> None:
         for extra in paragraphs[1:]:
             cell._tc.remove(extra)
 
-    source_run = next(iter(paragraph.iter(qn("w:r"))), None)
-    source_r_pr = deepcopy(source_run.rPr) if source_run is not None and source_run.rPr is not None else None
+    chosen_r_pr = primary_format_r_pr(paragraph)
+    source_r_pr = deepcopy(chosen_r_pr) if chosen_r_pr is not None else None
     for child in list(paragraph):
         if child.tag != qn("w:pPr"):
             paragraph.remove(child)
